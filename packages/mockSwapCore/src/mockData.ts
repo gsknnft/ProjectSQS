@@ -33,6 +33,60 @@ export const COMMON_TOKENS = {
 };
 
 /**
+ * Token decimals helpers for realistic unit scaling
+ */
+const TOKEN_DECIMALS: Record<string, number> = {
+  [COMMON_TOKENS.SOL]: 9,
+  [COMMON_TOKENS.USDC]: 6,
+  [COMMON_TOKENS.USDT]: 6,
+  [COMMON_TOKENS.BONK]: 5,
+  [COMMON_TOKENS.IMG]: 9,
+  [COMMON_TOKENS.JTO]: 9,
+};
+
+const tokenDecimalsCache = new Map<string, number>();
+let tokenListLoaded = false;
+
+async function ensureTokenListLoaded(): Promise<void> {
+  if (tokenListLoaded) return;
+  try {
+    const res = await fetch('https://token.jup.ag/all');
+    if (!res.ok) throw new Error(`token list ${res.status}`);
+    const list = await res.json();
+    if (Array.isArray(list)) {
+      for (const t of list) {
+        if (t?.address && typeof t?.decimals === 'number') {
+          tokenDecimalsCache.set(t.address, t.decimals);
+        }
+      }
+      tokenListLoaded = true;
+    }
+  } catch (e) {
+    console.warn('Failed to load Jupiter token list; using default decimals');
+  }
+}
+
+async function resolveTokenDecimals(mint: string): Promise<number> {
+  if (TOKEN_DECIMALS[mint] !== undefined) return TOKEN_DECIMALS[mint];
+  if (tokenDecimalsCache.has(mint)) return tokenDecimalsCache.get(mint)!;
+  await ensureTokenListLoaded();
+  if (tokenDecimalsCache.has(mint)) return tokenDecimalsCache.get(mint)!;
+  return 9;
+}
+
+function toBaseUnits(amountHuman: number, decimals: number): string {
+  // Use string to avoid float precision; round to integer base units
+  const v = Math.round(amountHuman * Math.pow(10, decimals));
+  return String(v);
+}
+
+function fromBaseUnits(amountBase: unknown, decimals: number): number {
+  const n = typeof amountBase === 'string' ? Number(amountBase) : Number(amountBase);
+  if (!isFinite(n)) return 0;
+  return n / Math.pow(10, decimals);
+}
+
+/**
  * Mock pool database (for demo mode)
  */
 const MOCK_POOLS: Record<string, PoolData> = {
@@ -165,8 +219,10 @@ export async function getPoolDataForTokens(
     
     if (realReserves) {
       // Use TRUE on-chain reserves aligned with signal processing
-      reserveIn = Number(realReserves.reserveIn);
-      reserveOut = Number(realReserves.reserveOut);
+      const inDec = await resolveTokenDecimals(inputMint);
+      const outDec = await resolveTokenDecimals(outputMint);
+      reserveIn = Number(realReserves.reserveIn) / Math.pow(10, inDec);
+      reserveOut = Number(realReserves.reserveOut) / Math.pow(10, outDec);
       
       // Use actual fee from on-chain data if available
       if (realReserves.fee) {
@@ -181,7 +237,15 @@ export async function getPoolDataForTokens(
       console.warn('⚠️ Using estimated reserves (on-chain fetch failed)');
     }
 
-    const sweepData = await generateSweepDataV1(inputMint, outputMint, amount);
+    // Anchor price to the live quote to avoid pool mismatch
+    const quotePrice = quote.outAmount > 0 && quote.inAmount > 0 ? (quote.outAmount / quote.inAmount) : undefined;
+    if (quotePrice && isFinite(quotePrice) && quotePrice > 0) {
+      reserveOut = reserveIn * quotePrice;
+    }
+
+  // Compute perfect price from reserves (human units)
+  const perfectPrice = reserveOut / reserveIn;
+  const sweepData = await generateSweepDataV1(inputMint, outputMint, amount, perfectPrice);
 
     return {
       reserves: {
@@ -284,11 +348,16 @@ async function fetchJupiterLiteQuote(
   amount: number
 ): Promise<{ inAmount: number; outAmount: number; poolId?: string; fee?: number } | null> {
   try {
-    // Jupiter Lite v1 quote API - GET request with query parameters
+    // Resolve decimals
+    const inDec = await resolveTokenDecimals(inputMint);
+    const outDec = await resolveTokenDecimals(outputMint);
+
+    // Jupiter Lite v1 quote API expects amounts in base units
+    const amountBase = toBaseUnits(amount, inDec);
     const params = new URLSearchParams({
       inputMint,
       outputMint,
-      amount: amount.toString(),
+      amount: amountBase,
       slippageBps: '50',
     });
 
@@ -300,15 +369,15 @@ async function fetchJupiterLiteQuote(
     if (!res.ok) throw new Error(`Jupiter Lite v1 quote error ${res.status}`);
     const data = await res.json();
 
-    // Jupiter Lite v1 response has data directly at root level
-    const inAmount = Number(data?.inAmount ?? amount);
-    const outAmount = Number(data?.outAmount ?? 0);
+  // Jupiter Lite v1 response amounts are base units
+  const inAmount = fromBaseUnits(data?.inAmount ?? amountBase, inDec);
+  const outAmount = fromBaseUnits(data?.outAmount ?? 0, outDec);
 
     if (!outAmount || !inAmount) return null;
 
     // Extract pool info from route plan
-    const poolId: string | undefined = data?.routePlan?.[0]?.swapInfo?.ammKey;
-    const fee: number | undefined = data?.priceImpactPct ? Math.abs(Number(data.priceImpactPct)) : undefined;
+  const poolId: string | undefined = data?.routePlan?.[0]?.swapInfo?.ammKey;
+  const fee: number | undefined = data?.priceImpactPct ? Math.abs(Number(data.priceImpactPct)) : undefined;
 
     return { inAmount, outAmount, poolId, fee };
   } catch (e) {
@@ -323,11 +392,14 @@ async function fetchRaydiumQuote(
   amount: number
 ): Promise<{ inAmount: number; outAmount: number; poolId?: string; fee?: number } | null> {
   try {
-    // Raydium compute/swap-base-in uses GET with query parameters
+    const inDec = await resolveTokenDecimals(inputMint);
+    const outDec = await resolveTokenDecimals(outputMint);
+    const amountBase = toBaseUnits(amount, inDec);
+    // Raydium compute/swap-base-in uses GET with query parameters; amount is base units
     const params = new URLSearchParams({
       inputMint,
       outputMint,
-      amount: amount.toString(),
+      amount: amountBase,
       slippageBps: '50',
       txVersion: 'V0',
     });
@@ -341,9 +413,9 @@ async function fetchRaydiumQuote(
     const data = await res.json();
 
     // Raydium response structure - data is nested in data.data
-    const quoteData = data?.data;
-    const inAmount = Number(amount);
-    const outAmount = Number(quoteData?.outputAmount ?? 0);
+  const quoteData = data?.data;
+  const inAmount = fromBaseUnits(amountBase, inDec);
+  const outAmount = fromBaseUnits(quoteData?.outputAmount ?? 0, outDec);
     
     if (!outAmount || !inAmount) return null;
 
@@ -363,7 +435,8 @@ async function fetchRaydiumQuote(
 async function generateSweepDataV1(
   inputMint: string,
   outputMint: string,
-  baseAmount: number
+  baseAmount: number,
+  perfectPrice: number
 ): Promise<SweepPoint[]> {
   const sweepData: SweepPoint[] = [];
   const multipliers = [0.1, 0.5, 1.0, 2.0, 5.0];
@@ -373,8 +446,10 @@ async function generateSweepDataV1(
     try {
       const quote = await fetchRealQuote(inputMint, outputMint, size);
       if (quote) {
-        const efficiency = (quote.outAmount / quote.inAmount) * 100;
-        sweepData.push({ size, percent: Math.min(100, efficiency) });
+        // Efficiency is output achieved relative to perfect price
+        const idealOut = quote.inAmount * perfectPrice;
+        const efficiency = idealOut > 0 ? (quote.outAmount / idealOut) * 100 : 0;
+        sweepData.push({ size, percent: Math.max(50, Math.min(100, efficiency)) });
       }
     } catch (error) {
       console.error(`Failed to fetch sweep data for size ${size}:`, error);
