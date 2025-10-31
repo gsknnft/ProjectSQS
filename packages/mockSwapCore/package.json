@@ -12,12 +12,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
-  },
-  "dependencies": {
-    "@hackathon/shared": "workspace:*"
-  },
-  "devDependencies": {
+      "exports": "./dist/index.js",
     "typescript": "^5.9.3"
   }
 }
