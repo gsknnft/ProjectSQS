@@ -1,32 +1,22 @@
 /**
  * Signal Engine - FFT and Coherence Processing
  * 
- * Wraps the REAL signal processing from qtransform and QSignalSuite
- * for visualization and analysis
+ * Standalone signal processing implementation for hackathon demo
+ * Uses DFT for spectrum analysis and visualization
  */
 
-import type { SignalFrame } from './types';
+import type { SignalFrame } from './types.js';
 import {
   generateMockSignal,
   calculateCoherence,
   calculateEntropy,
   findDominantFrequency,
   extractHarmonics,
-} from '@hackathon/shared/utils';
-
-// Try to import real FFT processor
-let FFTProcessorReal: any;
-try {
-  const fftModule = require('../../../packages/qtransform/src/fft/fft-processor');
-  FFTProcessorReal = fftModule.FFTProcessor;
-} catch (e) {
-  console.warn('Could not import real FFT processor, using fallback');
-  FFTProcessorReal = null;
-}
+} from '@hackathon/shared';
 
 /**
  * Generate signal frame from efficiency data
- * Uses real FFT if available, fallback to mock otherwise
+ * Uses standalone FFT implementation (no external dependencies)
  */
 export function generateSignalFrame(
   efficiency: number,
@@ -35,49 +25,12 @@ export function generateSignalFrame(
   // Generate input signal based on efficiency
   const signal = generateMockSignal(efficiency);
   
-  if (FFTProcessorReal && mode === 'real') {
-    try {
-      return generateWithRealFFT(signal, efficiency);
-    } catch (e) {
-      console.warn('Real FFT failed, using fallback:', e);
-    }
-  }
-  
-  // Fallback implementation
+  // Use standalone FFT implementation
   return generateWithFallbackFFT(signal, efficiency);
 }
 
 /**
- * Generate signal frame using real FFT processor
- */
-function generateWithRealFFT(signal: number[], efficiency: number): SignalFrame {
-  const fft = new FFTProcessorReal(1024);
-  const result = fft.forwardWithPhase(Float64Array.from(signal));
-  
-  const coherence = calculateCoherence(Array.from(result.magnitude));
-  const entropy = calculateEntropy(Array.from(result.magnitude));
-  const dominantHz = findDominantFrequency(Array.from(result.magnitude));
-  const harmonics = extractHarmonics(Array.from(result.magnitude), dominantHz);
-  
-  // Calculate average phase
-  let sumPhase = 0;
-  for (let i = 0; i < result.phase.length; i++) {
-    sumPhase += result.phase[i];
-  }
-  const avgPhase = sumPhase / result.phase.length;
-  
-  return {
-    coherence,
-    entropy,
-    phase: avgPhase,
-    dominantHz,
-    harmonics,
-    magnitude: Array.from(result.magnitude),
-  };
-}
-
-/**
- * Fallback FFT using simple DFT (for demo when real FFT unavailable)
+ * Standalone FFT using simple DFT for spectrum analysis
  */
 function generateWithFallbackFFT(signal: number[], efficiency: number): SignalFrame {
   const N = signal.length;
