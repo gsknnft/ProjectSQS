@@ -205,16 +205,15 @@ async function fetchJupiterLiteQuote(
     if (!res.ok) throw new Error(`Jupiter Lite v1 quote error ${res.status}`);
     const data = await res.json();
 
-    // Jupiter response structure - data can be at root or in data.data array
-    const quoteData = Array.isArray(data?.data) ? data.data[0] : data;
-    const inAmount = Number(quoteData?.inAmount ?? amount);
-    const outAmount = Number(quoteData?.outAmount ?? 0);
+    // Jupiter Lite v1 response has data directly at root level
+    const inAmount = Number(data?.inAmount ?? amount);
+    const outAmount = Number(data?.outAmount ?? 0);
 
     if (!outAmount || !inAmount) return null;
 
     // Extract pool info from route plan
-    const poolId: string | undefined = quoteData?.routePlan?.[0]?.swapInfo?.ammKey;
-    const fee: number | undefined = quoteData?.priceImpactPct ? Math.abs(Number(quoteData.priceImpactPct)) : undefined;
+    const poolId: string | undefined = data?.routePlan?.[0]?.swapInfo?.ammKey;
+    const fee: number | undefined = data?.priceImpactPct ? Math.abs(Number(data.priceImpactPct)) : undefined;
 
     return { inAmount, outAmount, poolId, fee };
   } catch (e) {
