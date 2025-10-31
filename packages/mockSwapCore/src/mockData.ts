@@ -17,6 +17,7 @@ import {
  * API Endpoints
  */
 const JUPITER_LITE_QUOTE_API = 'https://lite-api.jup.ag/swap/v1/quote';
+const JUPITER_PRICE_API_V2 = 'https://api.jup.ag/price/v2';
 const RAYDIUM_COMPUTE_API = 'https://transaction-v1.raydium.io/compute/swap-base-in';
 
 /**
@@ -93,6 +94,51 @@ let lastPriceUpdate = 0;
 const PRICE_UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 /**
+ * Fetch price data from Jupiter Price API v2
+ * More efficient and robust than using quote API for price data
+ */
+async function fetchPrice({
+  inputMint,
+  outputMint,
+  extraInfo = true
+}: {
+  inputMint: string;
+  outputMint: string;
+  extraInfo?: boolean;
+}): Promise<{ inUsd: number; outUsd: number; spotRate: number } | null> {
+  try {
+    const url = `${JUPITER_PRICE_API_V2}?ids=${inputMint},${outputMint}&showExtraInfo=${extraInfo}`;
+    
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Jupiter Price API v2 error ${res.status}`);
+    
+    const response = await res.json();
+    const inData = response.data?.[inputMint];
+    const outData = response.data?.[outputMint];
+    
+    if (!inData?.price || !outData?.price) {
+      return null;
+    }
+    
+    const inUsd = Number(inData.price);
+    const outUsd = Number(outData.price);
+    
+    if (!isFinite(inUsd) || !isFinite(outUsd) || inUsd <= 0 || outUsd <= 0) {
+      return null;
+    }
+    
+    return {
+      inUsd,
+      outUsd,
+      spotRate: outUsd / inUsd, // OUT per IN
+    };
+  } catch (error) {
+    console.warn('Jupiter Price API v2 failed:', error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+/**
  * Mock pool database (for demo mode)
  * These will be updated periodically with real prices
  */
@@ -149,7 +195,7 @@ const MOCK_POOLS: Record<string, PoolData> = {
 
 /**
  * Fetch real price and update mock pool reserves
- * Uses Jupiter Lite API to get current market prices with proper decimal handling
+ * Uses Jupiter Price API v2 for efficient, direct USD price data
  */
 async function updatePoolWithRealPrice(
   poolKey: string,
@@ -157,24 +203,35 @@ async function updatePoolWithRealPrice(
   outputMint: string
 ): Promise<void> {
   try {
-    // Use a standard amount (1.0 in human-readable units)
-    const amount = 1.0;
+    // Try the more efficient Price API v2 first
+    const priceData = await fetchPrice({ inputMint, outputMint, extraInfo: true });
     
-    const quote = await fetchRealQuote(inputMint, outputMint, amount);
+    if (priceData) {
+      // Use direct spot rate from Price API
+      const priceRatio = priceData.spotRate;
+      
+      // Update the pool reserves to reflect real price while maintaining liquidity depth
+      const pool = MOCK_POOLS[poolKey];
+      if (pool) {
+        // Keep reserveIn the same, adjust reserveOut to match real price
+        pool.reserves.reserveOut = pool.reserves.reserveIn * priceRatio;
+        console.log(`✅ Updated ${poolKey} price: 1 input = ${priceRatio.toFixed(6)} output (USD: $${priceData.inUsd.toFixed(2)} → $${priceData.outUsd.toFixed(2)})`);
+      }
+      return;
+    }
+    
+    // Fallback to quote-based price calculation if Price API fails
+    const quote = await fetchRealQuote(inputMint, outputMint, 1.0);
     if (!quote) {
       console.warn(`Failed to fetch price for ${poolKey}`);
       return;
     }
 
-    // Calculate the real price ratio (already in human-readable units from fetchRealQuote)
     const priceRatio = quote.outAmount / quote.inAmount;
-    
-    // Update the pool reserves to reflect real price while maintaining liquidity depth
     const pool = MOCK_POOLS[poolKey];
     if (pool) {
-      // Keep reserveIn the same, adjust reserveOut to match real price
       pool.reserves.reserveOut = pool.reserves.reserveIn * priceRatio;
-      console.log(`✅ Updated ${poolKey} price: 1 input = ${priceRatio.toFixed(6)} output`);
+      console.log(`✅ Updated ${poolKey} price: 1 input = ${priceRatio.toFixed(6)} output (fallback)`);
     }
   } catch (error) {
     console.error(`Failed to update price for ${poolKey}:`, error);
