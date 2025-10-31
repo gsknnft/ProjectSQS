@@ -110,11 +110,12 @@ export async function mockSwapWithRealData(
   }
 
   try {
-    // Fetch real pool data (NO EXECUTION)
+    // Fetch real pool data with TRUE on-chain reserves (NO EXECUTION)
     const poolData = await getPoolDataForTokens(
       config.inputMint,
       config.outputMint,
-      config.amount
+      config.amount,
+      config.rpcUrl // Pass through custom RPC URL if provided
     );
 
     if (!poolData) {

@@ -18,7 +18,12 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@hackathon/shared": "workspace:*"
+    "@hackathon/shared": "workspace:*",
+    "@solana/web3.js": "^1.95.8",
+    "@solana/spl-token": "^0.4.9",
+    "@raydium-io/raydium-sdk-v2": "^0.2.30-alpha",
+    "decimal.js": "^10.4.3",
+    "axios": "^1.7.9"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

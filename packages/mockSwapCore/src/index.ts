@@ -13,4 +13,16 @@ export { generateSignalFrame } from './signalEngine.js';
 export { FieldResonatorMock } from './fieldResonator.js';
 export { QuantumDecisionAdapter } from './quantumAdapter.js';
 export { getMockPoolData, getPoolDataForTokens, COMMON_TOKENS, isValidSolanaAddress } from './mockData.js';
+export {
+  getRpcConnection,
+  setCustomRpcUrl,
+  getCustomRpcUrl,
+  clearConnectionCache,
+  getRaydiumPoolReserves,
+  resolvePoolId,
+  getLiquidityForMint,
+  getRaydiumReservesForMint,
+  type PoolReserves,
+  type VaultInfo,
+} from './resolveReserves.js';
 export type { MockSwapConfig, SwapMode } from './types.js';

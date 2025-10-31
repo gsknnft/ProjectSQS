@@ -18,6 +18,7 @@ export interface RealTokenConfig {
   outputMint: string;
   amount: number;
   slippageBps?: number;
+  rpcUrl?: string; // Optional custom RPC URL for on-chain data fetching
 }
 
 export interface PoolData {
