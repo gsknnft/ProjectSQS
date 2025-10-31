@@ -1,44 +1,25 @@
 /**
- * Liquidity Model - Wraps the real buildLiquidityAwareModel
+ * Liquidity Model - Standalone liquidity-aware modeling
  * 
- * This imports and uses the ACTUAL production liquidity modeling
- * from the MSE package, keeping the "special sauce" encapsulated
+ * Self-contained implementation for hackathon demo
+ * Uses polynomial regression for efficiency prediction
  */
 
 import type { LiquidityContext, SweepPoint } from './types';
 
-// Import the REAL liquidity-aware model from production code
-let buildLiquidityAwareModelReal: any;
-try {
-  const liquidityModule = require('../../../packages/mse/src/ghost/liquidityAwareModel');
-  buildLiquidityAwareModelReal = liquidityModule.buildLiquidityAwareModel;
-} catch (e) {
-  console.warn('Could not import real liquidity model, using fallback');
-  buildLiquidityAwareModelReal = null;
-}
-
 /**
- * Build efficiency predictor using real or fallback logic
+ * Build efficiency predictor using standalone implementation
  */
 export function buildLiquidityModel(
   points: SweepPoint[],
   liquidity: LiquidityContext
 ): (size: number) => number {
-  // Try to use the real model first
-  if (buildLiquidityAwareModelReal) {
-    try {
-      return buildLiquidityAwareModelReal(points, liquidity);
-    } catch (e) {
-      console.warn('Real model failed, using fallback:', e);
-    }
-  }
-
-  // Fallback: simple polynomial regression for demo
+  // Use standalone polynomial regression implementation
   return buildFallbackModel(points, liquidity);
 }
 
 /**
- * Fallback model for demo/offline mode
+ * Standalone model implementation
  * Uses polynomial regression on the sweep data
  */
 function buildFallbackModel(

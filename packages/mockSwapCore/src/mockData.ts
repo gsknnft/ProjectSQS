@@ -20,63 +20,6 @@ export const COMMON_TOKENS = {
 };
 
 /**
- * Known token decimals (by mint) for realistic unit scaling
- */
-const TOKEN_DECIMALS: Record<string, number> = {
-  [COMMON_TOKENS.SOL]: 9,
-  [COMMON_TOKENS.USDC]: 6,
-  [COMMON_TOKENS.USDT]: 6,
-  [COMMON_TOKENS.BONK]: 5,
-  [COMMON_TOKENS.IMG]: 9, // unknown; assume 9 for demo
-  [COMMON_TOKENS.JTO]: 9, // JTO commonly uses 9
-};
-
-function getTokenDecimals(mint: string): number {
-  return TOKEN_DECIMALS[mint] ?? 9;
-}
-
-// In-memory cache for token decimals resolved from Jupiter token list
-const tokenDecimalsCache = new Map<string, number>();
-let tokenListLoaded = false;
-
-async function ensureTokenListLoaded(): Promise<void> {
-  if (tokenListLoaded) return;
-  try {
-    const res = await fetch('https://token.jup.ag/all');
-    if (!res.ok) throw new Error(`token list ${res.status}`);
-    const list = await res.json();
-    if (Array.isArray(list)) {
-      for (const t of list) {
-        if (t?.address && typeof t?.decimals === 'number') {
-          tokenDecimalsCache.set(t.address, t.decimals);
-        }
-      }
-      tokenListLoaded = true;
-    }
-  } catch (e) {
-    console.warn('Failed to load Jupiter token list; using defaults', e);
-  }
-}
-
-async function resolveTokenDecimals(mint: string): Promise<number> {
-  if (TOKEN_DECIMALS[mint] !== undefined) return TOKEN_DECIMALS[mint];
-  if (tokenDecimalsCache.has(mint)) return tokenDecimalsCache.get(mint)!;
-  await ensureTokenListLoaded();
-  if (tokenDecimalsCache.has(mint)) return tokenDecimalsCache.get(mint)!;
-  return 9; // safe default
-}
-
-function toBaseUnits(amountHuman: number, decimals: number): number {
-  // Avoid floating precision as much as possible for demo scale
-  return Math.round(amountHuman * Math.pow(10, decimals));
-}
-
-function fromBaseUnits(amountBase: number | string, decimals: number): number {
-  const n = typeof amountBase === 'string' ? Number(amountBase) : amountBase;
-  return n / Math.pow(10, decimals);
-}
-
-/**
  * Mock pool database (for demo mode)
  */
 const MOCK_POOLS: Record<string, PoolData> = {
@@ -245,15 +188,11 @@ async function fetchJupiterLiteQuote(
   amount: number
 ): Promise<{ inAmount: number; outAmount: number; poolId?: string; fee?: number } | null> {
   try {
-    const inDec = await resolveTokenDecimals(inputMint);
-    const outDec = await resolveTokenDecimals(outputMint);
-    const amountBase = toBaseUnits(amount, inDec);
-
     // Jupiter lite swap v1 typically expects POST with JSON
     const body = {
       inputMint,
       outputMint,
-      amount: String(amountBase), // base units
+      amount, // in smallest units if tokens with decimals; we approximate here
       slippageBps: 50,
       swapMode: 'ExactIn',
       onlyDirectRoutes: false,
@@ -269,19 +208,18 @@ async function fetchJupiterLiteQuote(
     if (!res.ok) throw new Error(`Jupiter Lite v1 error ${res.status}`);
     const data = await res.json();
 
-    // Possible shapes: data.quote.outAmount / inAmount, or other fields
-    const inAmountBase = data?.quote?.inAmount ?? amountBase;
-    const outAmountBase = data?.quote?.outAmount ?? data?.otherAmountThreshold ?? data?.outAmount ?? 0;
+    // Possible shapes: data.quote.outAmount / inAmount, or data.otherAmountThreshold, or data.routes
+    const inAmount = Number(data?.quote?.inAmount ?? amount);
+    const outAmount = Number(
+      data?.quote?.outAmount ?? data?.otherAmountThreshold ?? data?.outAmount ?? 0
+    );
 
-    const inAmountHuman = fromBaseUnits(inAmountBase, inDec);
-    const outAmountHuman = fromBaseUnits(outAmountBase, outDec);
-
-    if (!outAmountHuman || !inAmountHuman) return null;
+    if (!outAmount || !inAmount) return null;
 
     const poolId: string | undefined = data?.routePlan?.[0]?.swapInfo?.ammKey || data?.ammKey;
     const fee: number | undefined = Number(data?.quote?.feeBps) ? Number(data.quote.feeBps) / 10000 : undefined;
 
-    return { inAmount: inAmountHuman, outAmount: outAmountHuman, poolId, fee };
+    return { inAmount, outAmount, poolId, fee };
   } catch (e) {
     console.warn('Jupiter Lite v1 quote failed:', e);
     return null;
@@ -294,13 +232,10 @@ async function fetchRaydiumQuote(
   amount: number
 ): Promise<{ inAmount: number; outAmount: number; poolId?: string; fee?: number } | null> {
   try {
-    const inDec = await resolveTokenDecimals(inputMint);
-    const outDec = await resolveTokenDecimals(outputMint);
-    const amountBase = toBaseUnits(amount, inDec);
     const body = {
       inputMint,
       outputMint,
-      amountIn: String(amountBase), // base units
+      amountIn: amount,
       slippageBps: 50,
     } as any;
 
@@ -311,18 +246,16 @@ async function fetchRaydiumQuote(
     });
 
     if (!res.ok) throw new Error(`Raydium swap-base-in error ${res.status}`);
-  const data = await res.json();
+    const data = await res.json();
 
-  // Attempt to read amounts from response; schema may differ
-  const inAmountBase = data?.inAmount ?? amountBase;
-  const outAmountBase = data?.outAmount ?? data?.minOutAmount ?? 0;
-  const inAmountHuman = fromBaseUnits(inAmountBase, inDec);
-  const outAmountHuman = fromBaseUnits(outAmountBase, outDec);
-  if (!outAmountHuman || !inAmountHuman) return null;
+    // Attempt to read amounts from response; schema may differ
+    const inAmount = Number(data?.inAmount ?? amount);
+    const outAmount = Number(data?.outAmount ?? data?.minOutAmount ?? 0);
+    if (!outAmount || !inAmount) return null;
 
     const poolId: string | undefined = data?.poolKeys?.id || data?.route?.[0]?.id;
     const fee: number | undefined = Number(data?.feeBps) ? Number(data.feeBps) / 10000 : undefined;
-    return { inAmount: inAmountHuman, outAmount: outAmountHuman, poolId, fee };
+    return { inAmount, outAmount, poolId, fee };
   } catch (e) {
     console.warn('Raydium quote failed:', e);
     return null;
