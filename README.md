@@ -294,6 +294,43 @@ cd packages/ui && pnpm preview # UI on port 4173
 - Phase alignment tracking
 - Historical signal buffer
 
+## 🚀 Post-Hackathon Expansion: Multi-Venue Comparison
+
+The `post-deadline-commits` branch includes comprehensive multi-venue comparison capabilities:
+
+### New Features
+- **Multi-Venue Quote Fetching**: Get quotes from Jupiter, Raydium, Orca, and Meteora simultaneously
+- **Best Rate Detection**: Automatically identify the best venue for your swap
+- **Arbitrage Detection**: Find profitable arbitrage opportunities across venues (>0.5% spread)
+- **Efficiency Metrics**: Compare efficiency of each venue relative to the best quote
+
+### New API Endpoints
+```
+GET/POST /api/compare-venues    # Full comparison with arbitrage detection
+GET      /api/venue-quotes       # Lightweight quote fetching
+```
+
+### Usage Example
+```typescript
+import { compareVenues, COMMON_TOKENS } from '@hackathon/mockSwapCore';
+
+const comparison = await compareVenues(
+  COMMON_TOKENS.SOL,
+  COMMON_TOKENS.USDC,
+  1.0
+);
+
+console.log('Best venue:', comparison.bestQuote.venue);
+console.log('Best rate:', comparison.bestQuote.outAmount);
+console.log('Arbitrage opportunities:', comparison.arbitrageOpportunities);
+```
+
+### Documentation
+- See `MULTI_VENUE_GUIDE.md` for complete API documentation
+- Check `packages/mockSwapCore/examples/multi-venue-usage.ts` for detailed examples
+
+This expansion enables verification that the current implementation is closer to the original vision of cross-venue comparison and arbitrage detection.
+
 ## 🤝 Support
 
 This is a self-contained demo package. For questions about the production SigilNet system, contact the core team.

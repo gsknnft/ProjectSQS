@@ -25,4 +25,14 @@ export {
   type PoolReserves,
   type VaultInfo,
 } from './resolveReserves.js';
+export {
+  compareVenues,
+  fetchAllVenueQuotes,
+  findBestQuote,
+  findArbitrageOpportunities,
+  type VenueName,
+  type VenueQuote,
+  type VenueComparison,
+  type ArbitrageOpportunity,
+} from './venueComparator.js';
 export type { MockSwapConfig, SwapMode } from './types.js';

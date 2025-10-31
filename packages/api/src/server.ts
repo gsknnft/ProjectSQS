@@ -11,6 +11,8 @@ import {
   mockSwap,
   mockSwapWithRealData,
   fullSimulation,
+  compareVenues,
+  fetchAllVenueQuotes,
 } from '../../mockSwapCore/dist/index.js';
 // Local demo token list and address validator to avoid cross-package coupling in dev
 const COMMON_TOKENS: Record<string, string> = {
@@ -224,6 +226,122 @@ app.get('/api/pools', (req: Request, res: Response) => {
   });
 });
 
+/**
+ * GET /api/compare-venues
+ * Compare quotes across all venues (Jupiter, Raydium, Orca, Meteora)
+ */
+app.get('/api/compare-venues', async (req: Request, res: Response) => {
+  try {
+    const { inputMint, outputMint, amount } = req.query;
+
+    if (!inputMint || !outputMint || !amount) {
+      return res.status(400).json({ 
+        error: 'Missing required parameters: inputMint, outputMint, amount' 
+      });
+    }
+
+    if (!isValidSolanaAddress(inputMint as string) || !isValidSolanaAddress(outputMint as string)) {
+      return res.status(400).json({ 
+        error: 'Invalid Solana token addresses' 
+      });
+    }
+
+    const amountNum = parseFloat(amount as string);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      return res.status(400).json({ error: 'Invalid amount' });
+    }
+
+    const comparison = await compareVenues(
+      inputMint as string,
+      outputMint as string,
+      amountNum
+    );
+
+    res.json(comparison);
+  } catch (error) {
+    console.error('Venue comparison error:', error);
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : 'Internal server error' 
+    });
+  }
+});
+
+/**
+ * POST /api/compare-venues
+ * Compare quotes across all venues (POST version with body)
+ */
+app.post('/api/compare-venues', async (req: Request, res: Response) => {
+  try {
+    const { inputMint, outputMint, amount } = req.body;
+
+    if (!inputMint || !outputMint || !amount) {
+      return res.status(400).json({ 
+        error: 'Missing required parameters: inputMint, outputMint, amount' 
+      });
+    }
+
+    if (!isValidSolanaAddress(inputMint) || !isValidSolanaAddress(outputMint)) {
+      return res.status(400).json({ 
+        error: 'Invalid Solana token addresses' 
+      });
+    }
+
+    const amountNum = parseFloat(amount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      return res.status(400).json({ error: 'Invalid amount' });
+    }
+
+    const comparison = await compareVenues(inputMint, outputMint, amountNum);
+
+    res.json(comparison);
+  } catch (error) {
+    console.error('Venue comparison error:', error);
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : 'Internal server error' 
+    });
+  }
+});
+
+/**
+ * GET /api/venue-quotes
+ * Get quotes from all venues without full comparison (lighter endpoint)
+ */
+app.get('/api/venue-quotes', async (req: Request, res: Response) => {
+  try {
+    const { inputMint, outputMint, amount } = req.query;
+
+    if (!inputMint || !outputMint || !amount) {
+      return res.status(400).json({ 
+        error: 'Missing required parameters: inputMint, outputMint, amount' 
+      });
+    }
+
+    if (!isValidSolanaAddress(inputMint as string) || !isValidSolanaAddress(outputMint as string)) {
+      return res.status(400).json({ 
+        error: 'Invalid Solana token addresses' 
+      });
+    }
+
+    const amountNum = parseFloat(amount as string);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      return res.status(400).json({ error: 'Invalid amount' });
+    }
+
+    const quotes = await fetchAllVenueQuotes(
+      inputMint as string,
+      outputMint as string,
+      amountNum
+    );
+
+    res.json({ quotes, timestamp: Date.now() });
+  } catch (error) {
+    console.error('Venue quotes error:', error);
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : 'Internal server error' 
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err: Error, req: Request, res: Response, next: any) => {
   console.error('Server error:', err);
@@ -245,6 +363,9 @@ app.listen(PORT, () => {
   console.log(`   POST /api/mock-trade`);
   console.log(`   GET  /api/tokens`);
   console.log(`   GET  /api/pools`);
+  console.log(`   GET  /api/compare-venues`);
+  console.log(`   POST /api/compare-venues`);
+  console.log(`   GET  /api/venue-quotes`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 });
 

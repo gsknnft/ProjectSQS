@@ -67,7 +67,7 @@ async function ensureTokenListLoaded(): Promise<void> {
   }
 }
 
-async function resolveTokenDecimals(mint: string): Promise<number> {
+export async function resolveTokenDecimals(mint: string): Promise<number> {
   if (TOKEN_DECIMALS[mint] !== undefined) return TOKEN_DECIMALS[mint];
   if (tokenDecimalsCache.has(mint)) return tokenDecimalsCache.get(mint)!;
   await ensureTokenListLoaded();
@@ -75,13 +75,13 @@ async function resolveTokenDecimals(mint: string): Promise<number> {
   return 9;
 }
 
-function toBaseUnits(amountHuman: number, decimals: number): string {
+export function toBaseUnits(amountHuman: number, decimals: number): string {
   // Use string to avoid float precision; round to integer base units
   const v = Math.round(amountHuman * Math.pow(10, decimals));
   return String(v);
 }
 
-function fromBaseUnits(amountBase: unknown, decimals: number): number {
+export function fromBaseUnits(amountBase: unknown, decimals: number): number {
   const n = typeof amountBase === 'string' ? Number(amountBase) : Number(amountBase);
   if (!isFinite(n)) return 0;
   return n / Math.pow(10, decimals);
