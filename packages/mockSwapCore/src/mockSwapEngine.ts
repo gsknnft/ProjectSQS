@@ -42,11 +42,14 @@ export async function mockSwap(
   // Predict efficiency
   const efficiency = model(amountIn);
 
-  // Calculate output amount
-  const amountOut = amountIn * (efficiency / 100);
-
-  // Calculate slippage
+  // Calculate perfect exchange rate from pool reserves
+  // This represents how many output tokens per input token at 100% efficiency
   const perfectPrice = poolData.reserves.reserveOut / poolData.reserves.reserveIn;
+
+  // Calculate output amount using pool exchange rate and efficiency
+  const amountOut = amountIn * perfectPrice * (efficiency / 100);
+
+  // Calculate slippage (difference from perfect price)
   const actualPrice = amountOut / amountIn;
   const slippage = ((perfectPrice - actualPrice) / perfectPrice) * 100;
 
@@ -124,11 +127,14 @@ export async function mockSwapWithRealData(
     // Predict efficiency
     const efficiency = model(config.amount);
 
-    // Calculate output amount
-    const amountOut = config.amount * (efficiency / 100);
-
-    // Calculate slippage
+    // Calculate perfect exchange rate from pool reserves
+    // This represents how many output tokens per input token at 100% efficiency
     const perfectPrice = poolData.reserves.reserveOut / poolData.reserves.reserveIn;
+
+    // Calculate output amount using pool exchange rate and efficiency
+    const amountOut = config.amount * perfectPrice * (efficiency / 100);
+
+    // Calculate slippage (difference from perfect price)
     const actualPrice = amountOut / config.amount;
     const slippage = Math.abs(((perfectPrice - actualPrice) / perfectPrice) * 100);
 
