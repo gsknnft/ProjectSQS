@@ -87,13 +87,20 @@ function fromBaseUnits(amountBase: unknown, decimals: number): number {
 }
 
 /**
+ * Price update tracking
+ */
+let lastPriceUpdate = 0;
+const PRICE_UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
+/**
  * Mock pool database (for demo mode)
+ * These will be updated periodically with real prices
  */
 const MOCK_POOLS: Record<string, PoolData> = {
   'SOL-USDC': {
     reserves: {
-      reserveIn: 5000000, // 5M SOL
-      reserveOut: 500000000, // 500M USDC
+      reserveIn: 5000000, // 5M SOL - will be updated with real prices
+      reserveOut: 925000000, // Initial: ~185 USDC per SOL
       poolId: 'demo-sol-usdc',
     },
     sweepData: [
@@ -108,7 +115,7 @@ const MOCK_POOLS: Record<string, PoolData> = {
   },
   'IMG-SOL': {
     reserves: {
-      reserveIn: 1000000000, // 1B IMG
+      reserveIn: 1000000000, // 1B IMG - will be updated with real prices
       reserveOut: 100000, // 100K SOL
       poolId: 'demo-img-sol',
     },
@@ -124,7 +131,7 @@ const MOCK_POOLS: Record<string, PoolData> = {
   },
   'BONK-USDC': {
     reserves: {
-      reserveIn: 50000000000, // 50B BONK
+      reserveIn: 50000000000, // 50B BONK - will be updated with real prices
       reserveOut: 5000000, // 5M USDC
       poolId: 'demo-bonk-usdc',
     },
@@ -141,9 +148,77 @@ const MOCK_POOLS: Record<string, PoolData> = {
 };
 
 /**
- * Get mock pool data for token pair (demo mode)
+ * Fetch real price and update mock pool reserves
+ * Uses Jupiter Lite API to get current market prices with proper decimal handling
  */
-export function getMockPoolData(inputToken: string, outputToken: string): PoolData {
+async function updatePoolWithRealPrice(
+  poolKey: string,
+  inputMint: string,
+  outputMint: string
+): Promise<void> {
+  try {
+    // Use a standard amount (1.0 in human-readable units)
+    const amount = 1.0;
+    
+    const quote = await fetchRealQuote(inputMint, outputMint, amount);
+    if (!quote) {
+      console.warn(`Failed to fetch price for ${poolKey}`);
+      return;
+    }
+
+    // Calculate the real price ratio (already in human-readable units from fetchRealQuote)
+    const priceRatio = quote.outAmount / quote.inAmount;
+    
+    // Update the pool reserves to reflect real price while maintaining liquidity depth
+    const pool = MOCK_POOLS[poolKey];
+    if (pool) {
+      // Keep reserveIn the same, adjust reserveOut to match real price
+      pool.reserves.reserveOut = pool.reserves.reserveIn * priceRatio;
+      console.log(`✅ Updated ${poolKey} price: 1 input = ${priceRatio.toFixed(6)} output`);
+    }
+  } catch (error) {
+    console.error(`Failed to update price for ${poolKey}:`, error);
+  }
+}
+
+/**
+ * Update all mock pools with real prices from the market
+ * This ensures demo mode reflects current market conditions
+ */
+async function updateMockPoolsWithRealPrices(): Promise<void> {
+  const now = Date.now();
+  
+  // Check if enough time has passed since last update
+  if (now - lastPriceUpdate < PRICE_UPDATE_INTERVAL) {
+    return; // Skip update if too soon
+  }
+  
+  console.log('🔄 Updating mock pools with real market prices...');
+  
+  try {
+    // Update SOL-USDC
+    await updatePoolWithRealPrice('SOL-USDC', COMMON_TOKENS.SOL, COMMON_TOKENS.USDC);
+    
+    // Update IMG-SOL
+    await updatePoolWithRealPrice('IMG-SOL', COMMON_TOKENS.IMG, COMMON_TOKENS.SOL);
+    
+    // Update BONK-USDC
+    await updatePoolWithRealPrice('BONK-USDC', COMMON_TOKENS.BONK, COMMON_TOKENS.USDC);
+    
+    lastPriceUpdate = now;
+    console.log('✅ Mock pools updated with real prices');
+  } catch (error) {
+    console.error('Failed to update mock pools:', error);
+  }
+}
+
+/**
+ * Get mock pool data for token pair (demo mode)
+ * Automatically updates with real prices periodically
+ */
+export async function getMockPoolData(inputToken: string, outputToken: string): Promise<PoolData> {
+  // Update pools with real prices if needed
+  await updateMockPoolsWithRealPrices();
   // Try to find matching pool
   const poolKey = `${inputToken}-${outputToken}`;
   const reverseKey = `${outputToken}-${inputToken}`;
