@@ -5,7 +5,7 @@
  * Uses polynomial regression for efficiency prediction
  */
 
-import type { LiquidityContext, SweepPoint } from './types';
+import type { LiquidityContext, SweepPoint } from './types.js';
 
 /**
  * Build efficiency predictor using standalone implementation

@@ -5,7 +5,7 @@
  * Uses DFT for spectrum analysis and visualization
  */
 
-import type { SignalFrame } from './types';
+import type { SignalFrame } from './types.js';
 import {
   generateMockSignal,
   calculateCoherence,

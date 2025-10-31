@@ -5,12 +5,12 @@
  * for both DEMO mode (synthetic) and REAL mode (actual token data, no execution)
  */
 
-import type { MockSwapResult, MockSwapConfig, RealTokenConfig } from './types';
-import { buildLiquidityModel, calculateImpactRatio, suggestChunkSize, getLiquidityRank } from './liquidityModel';
-import { generateSignalFrame, analyzeSignalQuality } from './signalEngine';
-import { FieldResonatorMock } from './fieldResonator';
-import { QuantumDecisionAdapter } from './quantumAdapter';
-import { getMockPoolData, getPoolDataForTokens, isValidSolanaAddress } from './mockData';
+import type { MockSwapResult, MockSwapConfig, RealTokenConfig } from './types.js';
+import { buildLiquidityModel, calculateImpactRatio, suggestChunkSize, getLiquidityRank } from './liquidityModel.js';
+import { generateSignalFrame, analyzeSignalQuality } from './signalEngine.js';
+import { FieldResonatorMock } from './fieldResonator.js';
+import { QuantumDecisionAdapter } from './quantumAdapter.js';
+import { getMockPoolData, getPoolDataForTokens, isValidSolanaAddress } from './mockData.js';
 
 /**
  * Default configuration

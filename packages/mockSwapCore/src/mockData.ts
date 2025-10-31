@@ -5,7 +5,7 @@
  * from Jupiter/Raydium for real mode (NO EXECUTION)
  */
 
-import type { LiquidityContext, SweepPoint, PoolData } from './types';
+import type { LiquidityContext, SweepPoint, PoolData } from './types.js';
 
 /**
  * Common Solana token addresses for demo
