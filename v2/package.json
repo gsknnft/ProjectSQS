@@ -2,7 +2,7 @@
   "name": "sigilnet-hackathon-demo",
   "version": "1.0.0",
   "private": true,
-  "description": "SigilNet Hackathon Demo - Quantum Signal Processing Showcase",
+  "description": "SigilNet Hackathon Demo - Clean Demo Version (No Execution)",
   "workspaces": [
     "packages/*"
   ],

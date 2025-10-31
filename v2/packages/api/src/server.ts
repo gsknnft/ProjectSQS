@@ -10,10 +10,23 @@ import cors from 'cors';
 import { 
   mockSwap, 
   mockSwapWithRealData, 
-  fullSimulation,
-  COMMON_TOKENS,
-  isValidSolanaAddress
+  fullSimulation 
 } from '@hackathon/mock-swap-core';
+// Local demo token list and address validator to avoid cross-package coupling in dev
+const COMMON_TOKENS: Record<string, string> = {
+  SOL: 'So11111111111111111111111111111111111111112',
+  USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  USDT: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+  IMG: 'imGNhoP6i8z7MqZmZwXgZQFdwDG7JHFUA9cRCJrGG4e',
+  BONK: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+  JTO: 'jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL',
+};
+
+function isValidSolanaAddress(address: string): boolean {
+  if (!address || address.length < 32 || address.length > 44) return false;
+  const base58Regex = /^[1-9A-HJ-NP-Za-km-z]+$/;
+  return base58Regex.test(address);
+}
 import type { QuoteRequest, QuoteResponse } from '@hackathon/shared';
 
 const app: Express = express();

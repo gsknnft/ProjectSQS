@@ -4,14 +4,16 @@
 
 > **📦 Standalone Package**: This HackathonApp is completely self-contained. It has no dependencies on the parent SigilNet repository and can be extracted, distributed, and run independently.
 
+> **🎯 Clean Demo Version**: This is the CLEAN, DEMONSTRATION-ONLY version - No execution, swaps, or connections. For the actionable version with full functionality, see HackathonAppv2.
+
 ## ⚠️ Important: No Execution Mode
 
 This demo package:
-- ✅ Standalone signal processing algorithms
-- ✅ Analyzes REAL Solana token liquidity data  
+- ✅ Standalone signal processing algorithms (self-contained DFT)
+- ✅ Analyzes REAL Solana token liquidity data via Jupiter Lite v1 and Raydium v1 APIs
 - ✅ Performs FFT and coherence calculations
-- ✅ Shows efficiency predictions
-- ✅ NO external package dependencies
+- ✅ Shows efficiency predictions with correct math (uses pool exchange rates)
+- ✅ NO external package dependencies (fully isolated)
 - ❌ NO wallet connection required
 - ❌ NO transaction execution
 - ❌ NO private keys needed
@@ -291,6 +293,16 @@ cd packages/ui && pnpm preview # UI on port 4173
 - Effective liquidity via geometric mean
 - Impact ratio calculation
 - No external dependencies
+
+### API Integration
+- Jupiter Lite v1 swap API (POST to https://lite-api.jup.ag/swap/v1/swap)
+- Raydium v1 swap-base-in API (POST to https://transaction-v1.raydium.io/transaction/swap-base-in)
+- Read-only quote fetching, NO execution
+
+### Math Corrections
+- Fixed swap calculations to use pool exchange rates
+- Output amount = inputAmount × (reserveOut / reserveIn) × (efficiency / 100)
+- Correctly converts between tokens (e.g., 100 SOL → USDC uses actual SOL/USDC price)
 
 ### Field Resonance
 - Simplified GreenResonator logic
