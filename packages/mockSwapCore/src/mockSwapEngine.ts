@@ -33,8 +33,8 @@ export async function mockSwap(
 ): Promise<MockSwapResult> {
   const cfg = { ...DEFAULT_CONFIG, ...config };
 
-  // Get mock pool data
-  const poolData = getMockPoolData(inputToken, outputToken);
+  // Get mock pool data (now fetches real prices periodically)
+  const poolData = await getMockPoolData(inputToken, outputToken);
 
   // Build liquidity model
   const model = buildLiquidityModel(poolData.sweepData, poolData.reserves);
