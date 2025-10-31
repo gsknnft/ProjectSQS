@@ -4,8 +4,8 @@
  * Provides field state analysis without execution
  */
 
-import type { SignalFrame } from './types';
-import { generateSignalFrame } from './signalEngine';
+import type { SignalFrame } from './types.js';
+import { generateSignalFrame } from './signalEngine.js';
 
 export interface FieldState {
   locked: boolean;

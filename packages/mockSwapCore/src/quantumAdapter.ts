@@ -5,9 +5,9 @@
  * based on signal analysis and field state
  */
 
-import type { SignalFrame } from './types';
-import type { FieldState } from './fieldResonator';
-import { getPhaseLockScore } from './signalEngine';
+import type { SignalFrame } from './types.js';
+import type { FieldState } from './fieldResonator.js';
+import { getPhaseLockScore } from './signalEngine.js';
 
 export interface DecisionParams {
   minCoherence: number;
