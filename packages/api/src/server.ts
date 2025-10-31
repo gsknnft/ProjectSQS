@@ -7,11 +7,11 @@
 
 import express, { Request, Response, Express } from 'express';
 import cors from 'cors';
-import { 
-  mockSwap, 
-  mockSwapWithRealData, 
-  fullSimulation 
-} from '@hackathon/mock-swap-core';
+import {
+  mockSwap,
+  mockSwapWithRealData,
+  fullSimulation,
+} from '../../mockSwapCore/dist/index.js';
 // Local demo token list and address validator to avoid cross-package coupling in dev
 const COMMON_TOKENS: Record<string, string> = {
   SOL: 'So11111111111111111111111111111111111111112',
@@ -136,7 +136,7 @@ app.get('/api/signals', async (req: Request, res: Response) => {
     const { efficiency = 95 } = req.query;
     
     // Import signal generation
-    const { generateSignalFrame } = await import('@hackathon/mock-swap-core');
+  const { generateSignalFrame } = await import('../../mockSwapCore/dist/index.js');
     
     const signal = generateSignalFrame(parseFloat(efficiency as string));
     
