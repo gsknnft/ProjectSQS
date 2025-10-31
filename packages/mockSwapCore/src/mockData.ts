@@ -20,6 +20,63 @@ export const COMMON_TOKENS = {
 };
 
 /**
+ * Known token decimals (by mint) for realistic unit scaling
+ */
+const TOKEN_DECIMALS: Record<string, number> = {
+  [COMMON_TOKENS.SOL]: 9,
+  [COMMON_TOKENS.USDC]: 6,
+  [COMMON_TOKENS.USDT]: 6,
+  [COMMON_TOKENS.BONK]: 5,
+  [COMMON_TOKENS.IMG]: 9, // unknown; assume 9 for demo
+  [COMMON_TOKENS.JTO]: 9, // JTO commonly uses 9
+};
+
+function getTokenDecimals(mint: string): number {
+  return TOKEN_DECIMALS[mint] ?? 9;
+}
+
+// In-memory cache for token decimals resolved from Jupiter token list
+const tokenDecimalsCache = new Map<string, number>();
+let tokenListLoaded = false;
+
+async function ensureTokenListLoaded(): Promise<void> {
+  if (tokenListLoaded) return;
+  try {
+    const res = await fetch('https://token.jup.ag/all');
+    if (!res.ok) throw new Error(`token list ${res.status}`);
+    const list = await res.json();
+    if (Array.isArray(list)) {
+      for (const t of list) {
+        if (t?.address && typeof t?.decimals === 'number') {
+          tokenDecimalsCache.set(t.address, t.decimals);
+        }
+      }
+      tokenListLoaded = true;
+    }
+  } catch (e) {
+    console.warn('Failed to load Jupiter token list; using defaults', e);
+  }
+}
+
+async function resolveTokenDecimals(mint: string): Promise<number> {
+  if (TOKEN_DECIMALS[mint] !== undefined) return TOKEN_DECIMALS[mint];
+  if (tokenDecimalsCache.has(mint)) return tokenDecimalsCache.get(mint)!;
+  await ensureTokenListLoaded();
+  if (tokenDecimalsCache.has(mint)) return tokenDecimalsCache.get(mint)!;
+  return 9; // safe default
+}
+
+function toBaseUnits(amountHuman: number, decimals: number): number {
+  // Avoid floating precision as much as possible for demo scale
+  return Math.round(amountHuman * Math.pow(10, decimals));
+}
+
+function fromBaseUnits(amountBase: number | string, decimals: number): number {
+  const n = typeof amountBase === 'string' ? Number(amountBase) : amountBase;
+  return n / Math.pow(10, decimals);
+}
+
+/**
  * Mock pool database (for demo mode)
  */
 const MOCK_POOLS: Record<string, PoolData> = {
@@ -130,9 +187,8 @@ function generateSyntheticPoolData(): PoolData {
 }
 
 /**
- * Fetch real pool data from Jupiter/Raydium (REAL MODE - NO EXECUTION)
- * 
- * This uses actual on-chain data but never executes trades
+ * Fetch real pool data from Jupiter Lite v1 or Raydium (REAL MODE - NO EXECUTION)
+ * Prefers Jupiter Lite v1 swap API, falls back to Raydium swap-base-in. We only read amounts.
  */
 export async function getPoolDataForTokens(
   inputMint: string,
@@ -140,94 +196,143 @@ export async function getPoolDataForTokens(
   amount: number
 ): Promise<PoolData | null> {
   try {
-    // Try to use Jupiter Quote API (read-only, no execution)
-    const quoteData = await fetchJupiterQuote(inputMint, outputMint, amount);
-    
-    if (quoteData) {
-      return {
-        reserves: quoteData.reserves,
-        sweepData: quoteData.sweepData,
-        volume24h: quoteData.volume24h,
-        fee: quoteData.fee,
-      };
-    }
-  } catch (error) {
-    console.error('Failed to fetch real pool data:', error);
-  }
+    const quote = await fetchRealQuote(inputMint, outputMint, amount);
+    if (!quote) return null;
 
-  return null;
-}
+    const sweepData = await generateSweepDataV1(inputMint, outputMint, amount);
 
-/**
- * Fetch Jupiter quote (read-only)
- */
-async function fetchJupiterQuote(
-  inputMint: string,
-  outputMint: string,
-  amount: number
-): Promise<{
-  reserves: LiquidityContext;
-  sweepData: SweepPoint[];
-  volume24h?: number;
-  fee?: number;
-} | null> {
-  try {
-    // Use Jupiter API for quote (no execution)
-    const response = await fetch(
-      `https://quote-api.jup.ag/v6/quote?` +
-      `inputMint=${inputMint}&` +
-      `outputMint=${outputMint}&` +
-      `amount=${amount}&` +
-      `slippageBps=50`
-    );
-
-    if (!response.ok) {
-      throw new Error(`Jupiter API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    // Extract route information
-    const route = data.routePlan?.[0];
-    if (!route) {
-      return null;
-    }
-
-    // Estimate reserves from the route (this is approximate)
-    const outAmount = parseInt(data.outAmount);
-    const inAmount = parseInt(data.inAmount);
-    const efficiency = (outAmount / inAmount) * 100;
-
-    // Generate sweep data by simulating different amounts
-    const sweepData: SweepPoint[] = await generateSweepData(
-      inputMint,
-      outputMint,
-      amount
-    );
-
-    // Estimate reserves (very approximate)
-    const estimatedReserveIn = inAmount * 100; // Rough estimate
-    const estimatedReserveOut = outAmount * 100;
+    // Estimate reserves (very approximate) from quote
+    const estimatedReserveIn = quote.inAmount * 100;
+    const estimatedReserveOut = quote.outAmount * 100;
 
     return {
       reserves: {
         reserveIn: estimatedReserveIn,
         reserveOut: estimatedReserveOut,
-        poolId: route.swapInfo?.ammKey || 'unknown',
+        poolId: quote.poolId || 'unknown',
       },
       sweepData,
-      fee: 0.003, // Default fee
+      fee: quote.fee ?? 0.003,
     };
   } catch (error) {
-    console.error('Jupiter quote failed:', error);
+    console.error('Failed to fetch real pool data:', error);
     return null;
   }
 }
 
 /**
- * Generate sweep data by querying multiple amounts
+ * Try Jupiter Lite v1 swap API, then Raydium swap-base-in; return standardized quote
  */
-async function generateSweepData(
+async function fetchRealQuote(
+  inputMint: string,
+  outputMint: string,
+  amount: number
+): Promise<{ inAmount: number; outAmount: number; poolId?: string; fee?: number } | null> {
+  // Try Jupiter Lite first
+  const jup = await fetchJupiterLiteQuote(inputMint, outputMint, amount).catch(() => null);
+  if (jup) return jup;
+
+  // Fallback to Raydium
+  const ray = await fetchRaydiumQuote(inputMint, outputMint, amount).catch(() => null);
+  if (ray) return ray;
+
+  return null;
+}
+
+async function fetchJupiterLiteQuote(
+  inputMint: string,
+  outputMint: string,
+  amount: number
+): Promise<{ inAmount: number; outAmount: number; poolId?: string; fee?: number } | null> {
+  try {
+    const inDec = await resolveTokenDecimals(inputMint);
+    const outDec = await resolveTokenDecimals(outputMint);
+    const amountBase = toBaseUnits(amount, inDec);
+
+    // Jupiter lite swap v1 typically expects POST with JSON
+    const body = {
+      inputMint,
+      outputMint,
+      amount: String(amountBase), // base units
+      slippageBps: 50,
+      swapMode: 'ExactIn',
+      onlyDirectRoutes: false,
+      asLegacyTransaction: true,
+    } as any;
+
+    const res = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) throw new Error(`Jupiter Lite v1 error ${res.status}`);
+    const data = await res.json();
+
+    // Possible shapes: data.quote.outAmount / inAmount, or other fields
+    const inAmountBase = data?.quote?.inAmount ?? amountBase;
+    const outAmountBase = data?.quote?.outAmount ?? data?.otherAmountThreshold ?? data?.outAmount ?? 0;
+
+    const inAmountHuman = fromBaseUnits(inAmountBase, inDec);
+    const outAmountHuman = fromBaseUnits(outAmountBase, outDec);
+
+    if (!outAmountHuman || !inAmountHuman) return null;
+
+    const poolId: string | undefined = data?.routePlan?.[0]?.swapInfo?.ammKey || data?.ammKey;
+    const fee: number | undefined = Number(data?.quote?.feeBps) ? Number(data.quote.feeBps) / 10000 : undefined;
+
+    return { inAmount: inAmountHuman, outAmount: outAmountHuman, poolId, fee };
+  } catch (e) {
+    console.warn('Jupiter Lite v1 quote failed:', e);
+    return null;
+  }
+}
+
+async function fetchRaydiumQuote(
+  inputMint: string,
+  outputMint: string,
+  amount: number
+): Promise<{ inAmount: number; outAmount: number; poolId?: string; fee?: number } | null> {
+  try {
+    const inDec = await resolveTokenDecimals(inputMint);
+    const outDec = await resolveTokenDecimals(outputMint);
+    const amountBase = toBaseUnits(amount, inDec);
+    const body = {
+      inputMint,
+      outputMint,
+      amountIn: String(amountBase), // base units
+      slippageBps: 50,
+    } as any;
+
+    const res = await fetch('https://transaction-v1.raydium.io/transaction/swap-base-in', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) throw new Error(`Raydium swap-base-in error ${res.status}`);
+  const data = await res.json();
+
+  // Attempt to read amounts from response; schema may differ
+  const inAmountBase = data?.inAmount ?? amountBase;
+  const outAmountBase = data?.outAmount ?? data?.minOutAmount ?? 0;
+  const inAmountHuman = fromBaseUnits(inAmountBase, inDec);
+  const outAmountHuman = fromBaseUnits(outAmountBase, outDec);
+  if (!outAmountHuman || !inAmountHuman) return null;
+
+    const poolId: string | undefined = data?.poolKeys?.id || data?.route?.[0]?.id;
+    const fee: number | undefined = Number(data?.feeBps) ? Number(data.feeBps) / 10000 : undefined;
+    return { inAmount: inAmountHuman, outAmount: outAmountHuman, poolId, fee };
+  } catch (e) {
+    console.warn('Raydium quote failed:', e);
+    return null;
+  }
+}
+
+/**
+ * Generate sweep data using the v1 quote fetcher
+ */
+async function generateSweepDataV1(
   inputMint: string,
   outputMint: string,
   baseAmount: number
@@ -236,34 +341,18 @@ async function generateSweepData(
   const multipliers = [0.1, 0.5, 1.0, 2.0, 5.0];
 
   for (const mult of multipliers) {
-    const size = Math.floor(baseAmount * mult);
-    
+    const size = Math.max(1, Math.floor(baseAmount * mult));
     try {
-      const response = await fetch(
-        `https://quote-api.jup.ag/v6/quote?` +
-        `inputMint=${inputMint}&` +
-        `outputMint=${outputMint}&` +
-        `amount=${size}&` +
-        `slippageBps=50`
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        const outAmount = parseInt(data.outAmount);
-        const inAmount = parseInt(data.inAmount);
-        const efficiency = (outAmount / inAmount) * 100;
-
-        sweepData.push({
-          size,
-          percent: Math.min(100, efficiency),
-        });
+      const quote = await fetchRealQuote(inputMint, outputMint, size);
+      if (quote) {
+        const efficiency = (quote.outAmount / quote.inAmount) * 100;
+        sweepData.push({ size, percent: Math.min(100, efficiency) });
       }
     } catch (error) {
       console.error(`Failed to fetch sweep data for size ${size}:`, error);
     }
   }
 
-  // If we couldn't get any data, return default
   if (sweepData.length === 0) {
     return [
       { size: baseAmount * 0.1, percent: 99.0 },
@@ -273,7 +362,6 @@ async function generateSweepData(
       { size: baseAmount * 5, percent: 85.0 },
     ];
   }
-
   return sweepData;
 }
 
