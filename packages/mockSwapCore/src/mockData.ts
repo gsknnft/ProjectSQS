@@ -132,7 +132,7 @@ function generateSyntheticPoolData(): PoolData {
 
 /**
  * Fetch real pool data from Jupiter Lite v1 or Raydium (REAL MODE - NO EXECUTION)
- * Prefers Jupiter Lite v1 swap API, falls back to Raydium swap-base-in. We only read amounts.
+ * Prefers Jupiter Lite v1 quote API, falls back to Raydium compute API. We only read amounts.
  */
 export async function getPoolDataForTokens(
   inputMint: string,
@@ -165,7 +165,7 @@ export async function getPoolDataForTokens(
 }
 
 /**
- * Try Jupiter Lite v1 swap API, then Raydium swap-base-in; return standardized quote
+ * Try Jupiter Lite v1 quote API, then Raydium compute API; return standardized quote
  */
 async function fetchRealQuote(
   inputMint: string,
@@ -189,36 +189,32 @@ async function fetchJupiterLiteQuote(
   amount: number
 ): Promise<{ inAmount: number; outAmount: number; poolId?: string; fee?: number } | null> {
   try {
-    // Jupiter lite swap v1 typically expects POST with JSON
-    const body = {
+    // Jupiter Lite v1 quote API - GET request with query parameters
+    const params = new URLSearchParams({
       inputMint,
       outputMint,
-      amount, // in smallest units if tokens with decimals; we approximate here
-      slippageBps: 50,
-      swapMode: 'ExactIn',
-      onlyDirectRoutes: false,
-      asLegacyTransaction: true,
-    } as any;
-
-    const res = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      amount: amount.toString(),
+      slippageBps: '50',
     });
 
-    if (!res.ok) throw new Error(`Jupiter Lite v1 error ${res.status}`);
+    const res = await fetch(`https://lite-api.jup.ag/swap/v1/quote?${params.toString()}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+    });
+
+    if (!res.ok) throw new Error(`Jupiter Lite v1 quote error ${res.status}`);
     const data = await res.json();
 
-    // Possible shapes: data.quote.outAmount / inAmount, or data.otherAmountThreshold, or data.routes
-    const inAmount = Number(data?.quote?.inAmount ?? amount);
-    const outAmount = Number(
-      data?.quote?.outAmount ?? data?.otherAmountThreshold ?? data?.outAmount ?? 0
-    );
+    // Jupiter response structure - data can be at root or in data.data array
+    const quoteData = Array.isArray(data?.data) ? data.data[0] : data;
+    const inAmount = Number(quoteData?.inAmount ?? amount);
+    const outAmount = Number(quoteData?.outAmount ?? 0);
 
     if (!outAmount || !inAmount) return null;
 
-    const poolId: string | undefined = data?.routePlan?.[0]?.swapInfo?.ammKey || data?.ammKey;
-    const fee: number | undefined = Number(data?.quote?.feeBps) ? Number(data.quote.feeBps) / 10000 : undefined;
+    // Extract pool info from route plan
+    const poolId: string | undefined = quoteData?.routePlan?.[0]?.swapInfo?.ammKey;
+    const fee: number | undefined = quoteData?.priceImpactPct ? Math.abs(Number(quoteData.priceImpactPct)) : undefined;
 
     return { inAmount, outAmount, poolId, fee };
   } catch (e) {
@@ -233,29 +229,33 @@ async function fetchRaydiumQuote(
   amount: number
 ): Promise<{ inAmount: number; outAmount: number; poolId?: string; fee?: number } | null> {
   try {
-    const body = {
+    // Raydium compute/swap-base-in uses GET with query parameters
+    const params = new URLSearchParams({
       inputMint,
       outputMint,
-      amountIn: amount,
-      slippageBps: 50,
-    } as any;
+      amount: amount.toString(),
+      slippageBps: '50',
+      txVersion: 'V0',
+    });
 
-    const res = await fetch('https://transaction-v1.raydium.io/transaction/swap-base-in', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+    const res = await fetch(`https://transaction-v1.raydium.io/compute/swap-base-in?${params.toString()}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
     });
 
     if (!res.ok) throw new Error(`Raydium swap-base-in error ${res.status}`);
     const data = await res.json();
 
-    // Attempt to read amounts from response; schema may differ
-    const inAmount = Number(data?.inAmount ?? amount);
-    const outAmount = Number(data?.outAmount ?? data?.minOutAmount ?? 0);
+    // Raydium response structure - data is nested in data.data
+    const quoteData = data?.data;
+    const inAmount = Number(amount);
+    const outAmount = Number(quoteData?.outputAmount ?? 0);
+    
     if (!outAmount || !inAmount) return null;
 
-    const poolId: string | undefined = data?.poolKeys?.id || data?.route?.[0]?.id;
-    const fee: number | undefined = Number(data?.feeBps) ? Number(data.feeBps) / 10000 : undefined;
+    const poolId: string | undefined = quoteData?.poolKeys?.id || quoteData?.id;
+    const fee: number | undefined = Number(quoteData?.feeBps) ? Number(quoteData.feeBps) / 10000 : undefined;
+    
     return { inAmount, outAmount, poolId, fee };
   } catch (e) {
     console.warn('Raydium quote failed:', e);
