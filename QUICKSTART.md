@@ -9,7 +9,7 @@ pnpm install
 pnpm hackathon:demo
 ```
 
-That's it! The demo will open at `http://localhost:3000`
+That's it! The UI will open at `http://localhost:3000` (or next free port) and API on `http://localhost:8787`.
 
 ## What Just Happened?
 
@@ -81,9 +81,9 @@ That's it! The demo will open at `http://localhost:3000`
 
 ### Port Already in Use
 ```bash
-# Kill processes on ports 8787 or 3000
-lsof -ti:8787 | xargs kill -9
-lsof -ti:3000 | xargs kill -9
+# Windows (PowerShell) - kill ports 8787 or 3000
+for /f "tokens=5" %a in ('netstat -ano ^| findstr :8787') do taskkill /f /pid %a
+for /f "tokens=5" %a in ('netstat -ano ^| findstr :3000') do taskkill /f /pid %a
 
 # Then restart
 pnpm hackathon:demo

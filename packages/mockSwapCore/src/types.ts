@@ -2,7 +2,7 @@
  * Types for Mock Swap Core
  */
 
-import type { LiquidityContext, SignalFrame, MockSwapResult } from '../../shared/types';
+import type { LiquidityContext, SignalFrame, MockSwapResult } from '@hackathon/shared/types';
 
 export type SwapMode = 'demo' | 'real';
 

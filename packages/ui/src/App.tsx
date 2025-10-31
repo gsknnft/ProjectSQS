@@ -4,7 +4,7 @@
  * Showcases quantum signal processing vs traditional analysis
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { SignalScope } from './components/SignalScope';
 import { LiquidityFlow } from './components/LiquidityFlow';
 import { MockSwapPanel } from './components/MockSwapPanel';

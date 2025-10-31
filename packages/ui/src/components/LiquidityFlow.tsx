@@ -148,9 +148,7 @@ export const LiquidityFlow: React.FC<LiquidityFlowProps> = ({
     ctx.lineWidth = thickness;
     ctx.setLineDash([]);
     
-    // Animated dash effect
-    const dashOffset = (Date.now() % 1000) / 10;
-    
+  // Animated dash effect (computed implicitly by particles)
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);

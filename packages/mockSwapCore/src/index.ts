@@ -7,10 +7,10 @@
  *                but NO execution or wallet connection
  */
 
-export { mockSwap, mockSwapWithRealData } from './mockSwapEngine';
+export { mockSwap, mockSwapWithRealData, fullSimulation } from './mockSwapEngine';
 export { buildLiquidityModel } from './liquidityModel';
 export { generateSignalFrame } from './signalEngine';
 export { FieldResonatorMock } from './fieldResonator';
 export { QuantumDecisionAdapter } from './quantumAdapter';
-export { getMockPoolData, getPoolDataForTokens } from './mockData';
+export { getMockPoolData, getPoolDataForTokens, COMMON_TOKENS, isValidSolanaAddress } from './mockData';
 export type { MockSwapConfig, SwapMode } from './types';

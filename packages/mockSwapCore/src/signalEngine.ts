@@ -12,7 +12,7 @@ import {
   calculateEntropy,
   findDominantFrequency,
   extractHarmonics,
-} from '../../shared/utils';
+} from '@hackathon/shared/utils';
 
 // Try to import real FFT processor
 let FFTProcessorReal: any;

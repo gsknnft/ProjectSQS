@@ -2,6 +2,7 @@
   "name": "@hackathon/api",
   "version": "1.0.0",
   "description": "Hackathon API server",
+  "type": "module",
   "main": "./dist/server.js",
   "scripts": {
     "build": "tsc",
