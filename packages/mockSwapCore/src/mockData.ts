@@ -14,6 +14,12 @@ import {
 } from './resolveReserves.js';
 
 /**
+ * API Endpoints
+ */
+const JUPITER_LITE_QUOTE_API = 'https://lite-api.jup.ag/swap/v1/quote';
+const RAYDIUM_COMPUTE_API = 'https://transaction-v1.raydium.io/compute/swap-base-in';
+
+/**
  * Common Solana token addresses for demo
  */
 export const COMMON_TOKENS = {
@@ -286,7 +292,7 @@ async function fetchJupiterLiteQuote(
       slippageBps: '50',
     });
 
-    const res = await fetch(`https://lite-api.jup.ag/swap/v1/quote?${params.toString()}`, {
+    const res = await fetch(`${JUPITER_LITE_QUOTE_API}?${params.toString()}`, {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
     });
@@ -326,7 +332,7 @@ async function fetchRaydiumQuote(
       txVersion: 'V0',
     });
 
-    const res = await fetch(`https://transaction-v1.raydium.io/compute/swap-base-in?${params.toString()}`, {
+    const res = await fetch(`${RAYDIUM_COMPUTE_API}?${params.toString()}`, {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
     });

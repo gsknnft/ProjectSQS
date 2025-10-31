@@ -21,8 +21,13 @@ import {
 } from "@raydium-io/raydium-sdk-v2";
 import Decimal from "decimal.js";
 
+// Default configuration
+const DEFAULT_RPC_URL = "https://api.mainnet-beta.solana.com";
+const DEFAULT_CLUSTER = "mainnet-beta" as Cluster;
+const API_TIMEOUT = 5000;
+
 // Initialize Raydium API
-const api = new Api({ cluster: "mainnet-beta" as Cluster, timeout: 5000 });
+const api = new Api({ cluster: DEFAULT_CLUSTER, timeout: API_TIMEOUT });
 
 // RPC Configuration
 let cachedConnection: Connection | null = null;
@@ -85,7 +90,7 @@ export function getRpcConnection(overrideUrl?: string): Connection {
   }
 
   // Priority: override > custom > env > default
-  const rpcUrl = overrideUrl || customRpcUrl || process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+  const rpcUrl = overrideUrl || customRpcUrl || process.env.SOLANA_RPC_URL || DEFAULT_RPC_URL;
   
   const connection = new Connection(rpcUrl, {
     commitment: "confirmed",
@@ -259,12 +264,18 @@ export async function getRaydiumPoolReserves(
     const tokenVaultA = new PublicKey(clmmKeys.vault.A);
     const tokenVaultB = new PublicKey(clmmKeys.vault.B);
 
+    // Fetch token decimals from on-chain mint accounts
+    const [mintAInfo, mintBInfo] = await Promise.all([
+      getMint(connection, new PublicKey(mints.mintA)),
+      getMint(connection, new PublicKey(mints.mintB)),
+    ]);
+
     // Minimal pool info for fetching compute info
     const poolInfo = {
       id: poolPk.toBase58(),
       programId: CLMM_PROGRAM_ID.toBase58(),
-      mintA: { address: mints.mintA, decimals: 9 } as ApiV3Token,
-      mintB: { address: mints.mintB, decimals: 6 } as ApiV3Token,
+      mintA: { address: mints.mintA, decimals: mintAInfo.decimals } as ApiV3Token,
+      mintB: { address: mints.mintB, decimals: mintBInfo.decimals } as ApiV3Token,
       config: {} as any,
       price: 0,
     };
