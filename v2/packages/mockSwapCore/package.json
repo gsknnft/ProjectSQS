@@ -1,0 +1,17 @@
+{
+  "name": "@hackathon/mock-swap-core",
+  "version": "1.0.0",
+  "description": "Mock swap engine with real signal processing",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@hackathon/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
